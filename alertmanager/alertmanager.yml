@@ -6,8 +6,34 @@ route:
   group_wait: 10s
   group_interval: 10s
   repeat_interval: 1h
-  receiver: webhook
+  receiver: webhook_default
+
+  routes:
+  - receiver: webhook_user
+    continue: true
+    match_re:
+      members: .*user.*
+
+  - receiver: webhook_sre
+    continue: true
+    match_re:
+      members: .*sre.*
+
+  - receiver: webhook_admin
+
 receivers:
-- name: webhook
+- name: webhook_default
   webhook_configs:
-  - url: http://webhook:5001/alert
+  - url: http://webhook_default:5001/alert
+
+- name: webhook_user
+  webhook_configs:
+  - url: http://webhook_user:5001/alert
+
+- name: webhook_sre
+  webhook_configs:
+  - url: http://webhook_sre:5001/alert
+
+- name: webhook_admin
+  webhook_configs:
+  - url: http://webhook_admin:5001/alert

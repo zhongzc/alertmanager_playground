@@ -33,7 +33,7 @@ func getRequestBody(r *http.Request) string {
 func webhookHandler(w http.ResponseWriter, r *http.Request) {
 	requestBody := getRequestBody(r)
 
-	msg := fmt.Sprintf("Webhook received: %s", requestBody)
+	msg := fmt.Sprintf("Webhook [%s] received: %s", r.Host, requestBody)
 
 	log.Print(msg)
 

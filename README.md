@@ -1,53 +1,130 @@
-# Alertmanager sandbox
+# Alertmanager Playground
 
-In this sandbox, a Prometheus [Alertmanager](https://github.com/prometheus/alertmanager) handles alerts thrown by a running Prometheus instance. The Alertmanager in this example is configured with one alert (specified in an [`alert.rules`](./prometheus/alert.rules) file) that Prometheus fires whenever the [`hello`](./hello/main.go) service—a simple web service—is down for more than 10 seconds. If Prometheus alerts the Alertmanager that the `hello` service is down, it will `POST` a webhook to the [`webhook`](./webhook/main.go) service, which will then log the alert sent by the Alertmanager to stdout.
+In this playground, a Prometheus [Alertmanager](https://github.com/prometheus/alertmanager) handles alerts thrown by a running Prometheus instance. The Alertmanager in this example is configured with one alert (specified in an [`alert.rules`](./prometheus/alert.rules) file) that Prometheus fires whenever services `alert_all`, `alert_user` and `alert_sre` of the same [`hello`](./hello/main.go) app—a simple web app—are down for more than 10 seconds. If Prometheus alerts the Alertmanager that any `alert_*` service is down, it will selectivity `POST` webhooks to the [`webhook_*`](./webhook/main.go) services—`webhook_sre`, `webhook_user` and `webhook_admin`, which will then log the alert sent by the Alertmanager to stdout.
+
+## Prerequisites
+
+[Docker](https://docker.com) and [Docker Compose](https://docs.docker.com/compose/).
 
 ## Usage
 
-To start the sandbox:
+To start the playground:
 
 ```bash
-# In the foreground
 make run # docker-compose up --build
-
-# In detached mode
-make run-detached # docker-compose up --build --detach
 ```
 
-This will start up five services:
+This will start up 4 kinds of services:
 
 Service | Description
 :-------|:-----------
-`prometheus` | A Prometheus instance that's [configured](./prometheus/alert.rules) to alert the Alertmanager whenever the `hello` web service has been down for more than 10 seconds
-`alertmanager` | An Alertmanager instance that's configured to `POST` an alert message to the `webhook` service whenever Prometheus alerts Alertmanager that the `hello` service is down
-`amtool` | [amtool](https://github.com/prometheus/alertmanager#amtool) is a CLI utility for interacting with the Alertmanager. This service is a utility container that enables you to run amtool against the Alertmanager instance included in the sandbox.
-`hello` | A simple [web service](./hello/main.go) written in Go. The `hello` web service has just two endpoints: a `/hello` endpoint that returns a `{"hello":"world"}` JSON object and a `/metrics` endpoint for Prometheus instrumentation
-`webhook` | A simple [web service](./webhook/main.go) written in Go. The `webhook` web service has just one `/alert` endpoint to which Alertmanager alerts are `POST`ed
+`prometheus` | A Prometheus instance that's [configured](./prometheus/alert.rules) to alert the Alertmanager whenever the `alert_*` web service has been down for more than 10 seconds
+`alertmanager` | An Alertmanager instance that's configured to `POST` an alert message to the `webhook` service whenever Prometheus alerts Alertmanager that the `alert_*` service is down
+`alert_*` | Instantiated from a simple [web app](./hello/main.go) written in Go. The `hello` web app has just two endpoints: a `/hello` endpoint that returns a `{"hello":"world"}` JSON object and a `/metrics` endpoint for Prometheus instrumentation
+`webhook_*` | Instantiated from a simple [web service](./webhook/main.go) written in Go. The `webhook` web service has just one `/alert` endpoint to which Alertmanager alerts are `POST`ed
 
-## Creating an alert
+## Creating Alerts
 
-When you first start up the containers, there's no alert-worthy behavior because the `hello` service is running as expected. You can verify this in the [Prometheus expression browser](http://localhost:9090/graph) using the [`up{job="hello"}`](http://localhost:9090/graph?g0.range_input=1h&g0.expr=up%7Bjob%3D%22hello%22%7D&g0.tab=1) expression, which should have a value of 1.
+When you first start up the containers, there's no alert-worthy behavior because the `alert_*` services are running as expected. You can verify this in the [Prometheus expression browser](http://localhost:9090/graph) using the [`up{job=~"alert_.*"}`](http://localhost:9090/graph?g0.range_input=1h&g0.expr=up%7Bjob%3D%22hello%22%7D&g0.tab=1) expression, which should have values of 1.
 
-To create an alert, stop the service:
+### Alert All Receivers
 
-```bash
-docker-compose stop hello
-```
-
-Wait about 10 seconds and you should see something like this in the Docker Compose logs:
-
-```
-webhook_1       | 2018/07/23 19:31:28 Webhook received: {"receiver":"webhook","status":"firing","alerts":[{"status":"firing","labels":{"alertname":"InstanceDown","instance":"hello:2112","job":"hello","severity":"page"},"annotations":{"description":"Instance hello:2112 of job hello has been down for more than 30 seconds","summary":"Instance hello:2112 down"},"startsAt":"2018-07-23T19:31:18.893055177Z","endsAt":"0001-01-01T00:00:00Z","generatorURL":"http://e192da4eb26f:9090/graph?g0.expr=up%7Bjob%3D%22hello%22%7D+%3D%3D+0\u0026g0.tab=1"}],"groupLabels":{"alertname":"InstanceDown"},"commonLabels":{"alertname":"InstanceDown","instance":"hello:2112","job":"hello","severity":"page"},"commonAnnotations":{"description":"Instance hello:2112 of job hello has been down for more than 30 seconds","summary":"Instance hello:2112 down"},"externalURL":"http://98c322df76cb:9093","version":"4","groupKey":"{}:{alertname=\"InstanceDown\"}"}
-```
-
-This indicates that Alertmanager has `POST`ed a webhook to the running [`webhook`](./webhook/main.go) service. You can also read the webhook service logs directly:
+To create alerts to `webhook_user`, `webhook_sre` and `webhook_admin`, stop the service `alert_all`:
 
 ```bash
-docker-compose logs webhook
+docker-compose stop alert_all
+```
+
+According to [the alert rule](./prometheus/alert.rules):
+
+```
+- alert: InstanceDown
+  expr: up{job="alert_all"} == 0
+  for: 10s
+  labels:
+    members: "user,sre"
+```
+
+and the related [alert manager configuration](./alertmanager/alertmanager.yml):
+
+```
+  routes:
+  - receiver: webhook_user
+    continue: true
+    match_re:
+      members: .*user.*
+
+  - receiver: webhook_sre
+    continue: true
+    match_re:
+      members: .*sre.*
+
+  - receiver: webhook_admin
+```
+
+all receivers, i.e. `webhook_user`, `webhook_sre` and `webhook_admin`, will be matched and notified. Wait about 10 seconds and you should see something like this in the Docker Compose logs:
+
+```
+alertmanager_playground_alert_all_1 exited with code 2
+webhook_admin_1    | 2021/02/05 09:39:58 Webhook [webhook_admin:5001] received: /* omitted */
+webhook_user_1     | 2021/02/05 09:39:58 Webhook [webhook_user:5001] received: /* omitted */
+webhook_sre_1      | 2021/02/05 09:39:58 Webhook [webhook_sre:5001] received: /* omitted */
+```
+
+### Alert Partial Receivers
+
+To create alerts only to `webhook_user` and `webhook_admin`, stop the service `alert_user`:
+
+```bash
+docker-compose stop alert_user
+```
+
+According to [the alert rule](./prometheus/alert.rules) and the [alert manager configuration](./alertmanager/alertmanager.yml):
+
+```
+# In prometheus/alert.rules:
+
+  - alert: InstanceDown
+    expr: up{job="alert_user"} == 0
+    for: 10s
+    labels:
+      members: "user"
+
+
+# In alertmanager/alertmanager.yml:
+
+  routes:
+  - receiver: webhook_user
+    continue: true
+    match_re:
+      members: .*user.*
+
+  - receiver: webhook_sre
+    continue: true
+    match_re:
+      members: .*sre.*
+
+  - receiver: webhook_admin
+```
+
+`webhook_user` and `webhook_admin` will be notified. Wait about 10 seconds and you should see something like this in the Docker Compose logs:
+
+```
+alertmanager_playground_alert_user_1 exited with code 2
+webhook_user_1     | 2021/02/05 09:41:38 Webhook [webhook_user:5001] received: /* omitted */
+webhook_admin_1    | 2021/02/05 09:41:38 Webhook [webhook_admin:5001] received: /* omitted */
 ```
 
 You can also see the alert in the [Alertmanager UI](http://localhost:9093/#/alerts). It should look like this:
 
 ![Alertmanager alert](./alert.png)
 
-In the Prometheus expression browser, [`up{job="hello"}`](http://localhost:9090/graph?g0.range_input=1h&g0.expr=up%7Bjob%3D%22hello%22%7D&g0.tab=1) should now have a value of 0.
+In the Prometheus expression browser, [`up{job=~"alert_.*"}`](http://localhost:9090/graph?g0.expr=up%7Bjob%3D~%22alert_.*%22%7D&g0.tab=1&g0.stacked=0&g0.range_input=1h) should now have two values of 0 and one value of 1.
+
+![Prometheus UI](./prom_ui.png)
+
+To clean up the playground:
+
+```bash
+make stop # docker-compose down
+```
