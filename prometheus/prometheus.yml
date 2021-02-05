@@ -18,18 +18,18 @@ scrape_configs:
   static_configs:
   - targets:
     - localhost:9090
-- job_name: alert_all
+- job_name: hello_all
   scrape_interval: 5s
   static_configs:
   - targets:
-    - alert_all:2112
-- job_name: alert_sre
+    - hello_all:2112
+- job_name: hello_sre
   scrape_interval: 5s
   static_configs:
   - targets:
-    - alert_sre:2112
-- job_name: alert_user
+    - hello_sre:2112
+- job_name: hello_user
   scrape_interval: 5s
   static_configs:
   - targets:
-    - alert_user:2112
+    - hello_user:2112

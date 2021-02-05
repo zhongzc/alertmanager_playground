@@ -1,18 +1,18 @@
 groups:
 - name: node.rules
   rules:
-  - alert: InstanceDown
-    expr: up{job="alert_all"} == 0
+  - alert: AlertAll
+    expr: up{job="hello_all"} == 0
     for: 10s
     labels:
       members: "user,sre"
-  - alert: InstanceDown
-    expr: up{job="alert_sre"} == 0
+  - alert: AlertSRE
+    expr: up{job="hello_sre"} == 0
     for: 10s
     labels:
       members: "sre"
-  - alert: InstanceDown
-    expr: up{job="alert_user"} == 0
+  - alert: AlertUser
+    expr: up{job="hello_user"} == 0
     for: 10s
     labels:
       members: "user"
